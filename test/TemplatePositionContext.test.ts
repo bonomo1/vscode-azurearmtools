@@ -158,8 +158,8 @@ suite("TemplatePositionContext", () => {
     suite("getTokenAtOrAfterCursor", () => {
         function getTextAtReplacementSpan(dt: DeploymentTemplate, index: number): string | undefined {
             const span = dt.getContextFromDocumentCharacterIndex(index, undefined)
-                .getJsonReplacementSpan();
-            return span ? dt.getDocumentText(span) : undefined;
+                .getCompletionReplacementSpanAsdf().span;
+            return dt.getDocumentText(span);
         }
 
         test("hyphens and exclamation points", async () => {

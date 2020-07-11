@@ -12,6 +12,7 @@ import { INamedDefinition } from "./INamedDefinition";
 import * as Json from "./JSON";
 import * as language from "./Language";
 import { ReferenceList } from "./ReferenceList";
+import { KnownSnippetContexts, SnippetContext } from "./snippets/KnownSnippetContexts";
 import * as TLE from "./TLE";
 import { InitializeBeforeUse } from "./util/InitializeBeforeUse";
 import { nonNullValue } from "./util/nonNull";
@@ -144,6 +145,50 @@ export abstract class PositionContext {
     }
 
     /**
+     * Gets the "word" at the cursor or right after the cursor position (i.e.,
+     * the token that the cursor is "touching"), to indicate the span that
+     * an Intellisense completi should replace
+     */
+    //asdf return addDoubleQuotes??
+    public getCompletionReplacementSpanAsdf(): { span: language.Span; token: Json.Token | undefined } {
+        const index = this.documentCharacterIndex;
+        let tokenAtCursor = this.document.getJSONTokenAtDocumentCharacterIndex(index);
+
+        // If there's no token at the current location, try again right before the cursor
+        if (!tokenAtCursor && index > 0) {
+            const tokenAfterCursor = this.document.getJSONTokenAtDocumentCharacterIndex(index - 1);
+            if (tokenAfterCursor) {
+                const line = this.document.getDocumentPosition(tokenAfterCursor.span.startIndex).line;
+                if (line === this.documentPosition.line) {
+                    tokenAtCursor = tokenAfterCursor;
+                }
+            }
+        }
+
+        if (tokenAtCursor && tokenAtCursor.type !== Json.TokenType.QuotedString) {
+            // We want to include hyphens in our definition of word, so that snippets such as
+            // "arm-keyvault" or "arm!mg" are replaced in whole by the snippet.  But such characters
+            // aren't part of literals in JSON, so look for a match directly in the text.
+            let start = tokenAtCursor.span.startIndex;
+            const documentText = this.document.documentText;
+            while (start > 0 && documentText.charAt(start - 1).match(/^[\w-!\$]/)) {
+                --start;
+            }
+
+            const match = this.document.documentText.slice(start).match(/^[\w-!\$]+/);
+            return {
+                span: match ? new language.Span(start, match[0].length) : this.emptySpanAtDocumentCharacterIndex,
+                token: tokenAtCursor
+            };
+        }
+
+        return {
+            span: tokenAtCursor?.span ?? this.emptySpanAtDocumentCharacterIndex,
+            token: tokenAtCursor
+        };
+    }
+
+    /**
      * If this position is inside an expression, inside a reference to an interesting function/parameter/etc, then
      * return an object with information about this reference and the corresponding definition
      */
@@ -194,4 +239,71 @@ export abstract class PositionContext {
     public abstract getCompletionItems(triggerCharacter: string | undefined): Promise<Completion.Item[]>;
 
     public abstract getSignatureHelp(): TLE.FunctionSignatureHelp | undefined;
+
+    public getSnippetContext(triggerCharacter: string | undefined): SnippetContext | undefined {
+        if (!this.document.topLevelValue) {
+            return KnownSnippetContexts.empty;
+        }
+
+        const insertionParent = this.getInsertionParent();
+        if (insertionParent) {
+            const lineage: Json.Value[] | undefined = this.document.topLevelValue.findLineage(insertionParent);
+            assert(lineage, `Couldn't find JSON value inside the top-level value: ${insertionParent.toFullFriendlyString()}`);
+            const parents = lineage.reverse();
+
+            // asdf comments
+            if (
+                (!triggerCharacter || triggerCharacter === '"')
+                && insertionParent instanceof Json.ObjectValue && parents[0] instanceof Json.Property
+            ) {
+                const parentPropertyName = parents[0].asPropertyValue?.nameValue.unquotedValue;
+                return <SnippetContext>parentPropertyName; //asdf
+            }
+
+            // asdf comments
+            if (
+                (triggerCharacter === '{')
+                && insertionParent instanceof Json.ObjectValue
+                && parents[0] instanceof Json.ArrayValue
+                && parents[1] instanceof Json.Property
+            ) {
+                const parentPropertyName = parents[1].asPropertyValue?.nameValue.unquotedValue;
+                return <SnippetContext>parentPropertyName; //asdf
+            }
+
+            if (
+                (!triggerCharacter || triggerCharacter === '{')
+                && insertionParent instanceof Json.ArrayValue
+                && parents[0] instanceof Json.Property
+            ) {
+                const parentPropertyName = parents[0].asPropertyValue?.nameValue.unquotedValue;
+                return <SnippetContext>parentPropertyName; //asdf
+            }
+        }
+
+        return undefined;
+    }
+
+    // True if inside the "parameters" object, but not inside any properties
+    // within it. asdf
+    public getInsertionParent(): Json.ObjectValue | Json.ArrayValue | undefined {
+        const enclosingJsonValue = this.document.jsonParseResult.getValueAtCharacterIndex(
+            this.documentCharacterIndex,
+            language.Contains.enclosed);
+        if (!(enclosingJsonValue instanceof Json.ObjectValue || enclosingJsonValue instanceof Json.ArrayValue)) {
+            return undefined;
+        }
+
+        // We're immediately inside an object or array, not any other kind of value.  But we could still be inside
+        // a comment
+        if (!!this.document.jsonParseResult.getCommentTokenAtDocumentIndex(
+            this.documentCharacterIndex,
+            language.Contains.enclosed)
+        ) {
+            // Inside a comment, can't insert here!
+            return undefined;
+        }
+
+        return enclosingJsonValue;
+    }
 }

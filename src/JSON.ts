@@ -12,6 +12,7 @@
 // Because the JSON/ARM parsers catch these errors, it doesn't make too much difference for the end user
 //   so might not be worth fixing.
 
+import { Json } from "../extension.bundle";
 import { CachedValue } from "./CachedValue";
 import { CaseInsensitiveMap } from "./CaseInsensitiveMap";
 import { assert } from "./fixed_assert";
@@ -623,6 +624,14 @@ export abstract class Value {
 
     public get asBooleanValue(): BooleanValue | undefined {
         return asBooleanValue(this);
+    }
+
+    public get asPropertyValue(): Property | undefined {
+        return this instanceof Property ? this : undefined;
+    }
+
+    public findLineage(descendent: Value): Value[] | undefined {
+        return FindLineageVisitor.visit(this, descendent);
     }
 }
 
@@ -1524,5 +1533,90 @@ export abstract class Visitor {
 
     public visitNullValue(nullValue: NullValue): void {
         // Nothing to do
+    }
+}
+
+/**
+ * A TLE visitor that searches a TLE value tree looking for references to the provided definition asdf
+ */
+export class FindLineageVisitor extends Visitor {
+    private _lineage: Value[];
+    private _foundLineage: Value[] | undefined;
+
+    constructor(
+        private readonly searchDescendent: Value
+    ) {
+        super();
+        this._lineage = [];
+    }
+
+    public visitStringValue(stringValue: StringValue): void {
+        if (stringValue === this.searchDescendent) {
+            this._found();
+        }
+    }
+
+    public visitNumberValue(numberValue: NumberValue): void {
+        if (numberValue === this.searchDescendent) {
+            this._found();
+        }
+    }
+
+    public visitBooleanValue(booleanValue: BooleanValue): void {
+        if (booleanValue === this.searchDescendent) {
+            this._found();
+        }
+    }
+
+    public visitNullValue(nullValue: NullValue): void {
+        if (nullValue === this.searchDescendent) {
+            this._found();
+        }
+    }
+
+    public visitProperty(property: Property | undefined): void {
+        if (!this._foundLineage && property) {
+            if (property === this.searchDescendent) {
+                this._found();
+            } else {
+                this._lineage.push(property);
+                super.visitProperty(property);
+                this._lineage.pop();
+            }
+        }
+    }
+
+    public visitObjectValue(objectValue: ObjectValue | undefined): void {
+        if (!this._foundLineage && objectValue) {
+            if (objectValue === this.searchDescendent) {
+                this._found();
+            } else {
+                this._lineage.push(objectValue);
+                super.visitObjectValue(objectValue);
+                this._lineage.pop();
+            }
+        }
+    }
+
+    public visitArrayValue(arrayValue: ArrayValue | undefined): void {
+        if (!this._foundLineage && arrayValue) {
+            if (arrayValue === this.searchDescendent) {
+                this._found();
+            } else {
+                this._lineage.push(arrayValue);
+                super.visitArrayValue(arrayValue);
+                this._lineage.pop();
+            }
+        }
+    }
+
+    private _found(): void {
+        this._foundLineage = this._lineage.slice();
+    }
+
+    public static visit(root: Json.Value, find: Json.Value): Value[] | undefined {
+        const visitor = new FindLineageVisitor(find);
+        root.accept(visitor);
+        return visitor._foundLineage;
     }
 }

@@ -5,6 +5,7 @@
 
 import * as Completion from "../Completion";
 import * as language from "../Language";
+import { SnippetContext } from "./KnownSnippetContexts";
 
 export interface ISnippet {
     /**
@@ -25,13 +26,6 @@ export interface ISnippet {
      * Snippet description
      */
     description: string;
-
-    /**
-     * Context in which this snippet can be used
-     */
-    context: {
-        isResource: boolean;
-    };
 }
 
 /**
@@ -44,9 +38,9 @@ export interface ISnippetManager {
     /**
      * Retrieve all snippets
      */
-    getSnippets(): Promise<ISnippet[]>;
+    getSnippets(context: SnippetContext): Promise<ISnippet[]>;
     /**
      * Retrieve completion items for all snippets
      */
-    getSnippetsAsCompletionItems(span: language.Span, _triggerCharacter: string | undefined): Promise<Completion.Item[]>;
+    getSnippetsAsCompletionItems(context: SnippetContext, span: language.Span, _triggerCharacter: string | undefined, addDoubleQuotes: boolean): Promise<Completion.Item[]>;
 }
