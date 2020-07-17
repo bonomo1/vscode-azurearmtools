@@ -822,7 +822,7 @@ export class TemplatePositionContext extends PositionContext {
     // }
 }
 
-interface ReplaceSpanInfo {
+interface ReplaceSpanInfo { //asdf?
     includeRightParenthesisInCompletion: boolean;
     replaceSpan: language.Span;
 }

@@ -21,6 +21,7 @@ export function toVsCodeCompletionItem(deploymentFile: DeploymentDocument, item:
     vscodeItem.documentation = item.documention;
     vscodeItem.commitCharacters = item.commitCharacters;
     vscodeItem.preselect = item.preselect;
+    vscodeItem.filterText = item.filterText;
 
     let sortPriorityPrefix: string;
     switch (item.priority) {

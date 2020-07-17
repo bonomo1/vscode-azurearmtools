@@ -171,11 +171,11 @@ export abstract class PositionContext {
             // aren't part of literals in JSON, so look for a match directly in the text.
             let start = tokenAtCursor.span.startIndex;
             const documentText = this.document.documentText;
-            while (start > 0 && documentText.charAt(start - 1).match(/^[\w-!\$]/)) {
+            while (start > 0 && documentText.charAt(start - 1).match(/^[\w-!\${}]/)) {
                 --start;
             }
 
-            const match = this.document.documentText.slice(start).match(/^[\w-!\$]+/);
+            const match = this.document.documentText.slice(start).match(/^[\w-!\${}]+/);
             return {
                 span: match ? new language.Span(start, match[0].length) : this.emptySpanAtDocumentCharacterIndex,
                 token: tokenAtCursor
@@ -240,8 +240,12 @@ export abstract class PositionContext {
 
     public abstract getSignatureHelp(): TLE.FunctionSignatureHelp | undefined;
 
+    /**
+     * Determines the snippet context at this location (i.e., the type of snippets which are appropriate to insert here)
+     */
     public getSnippetContext(triggerCharacter: string | undefined): SnippetContext | undefined {
         if (!this.document.topLevelValue) {
+            // Empty JSON document
             return KnownSnippetContexts.empty;
         }
 
@@ -251,33 +255,63 @@ export abstract class PositionContext {
             assert(lineage, `Couldn't find JSON value inside the top-level value: ${insertionParent.toFullFriendlyString()}`);
             const parents = lineage.reverse();
 
-            // asdf comments
+            // Inside an object, users types a snippet name or types a double quote
             if (
                 (!triggerCharacter || triggerCharacter === '"')
                 && insertionParent instanceof Json.ObjectValue && parents[0] instanceof Json.Property
             ) {
+                // We're inside of an object (and the user might have typed a double quote to start the property
+                // name.
+                // The context is the name of the property whose value is the object.  E.g.:
+                //
+                // "parameters": {
+                //      <<CURSOR>>
+                //        or
+                //      "<<CURSOR>>"
+                //
+                //   - context is "parameters" asdf
+                // }
+                //
                 const parentPropertyName = parents[0].asPropertyValue?.nameValue.unquotedValue;
-                return <SnippetContext>parentPropertyName; //asdf
+                return parentPropertyName;
             }
 
-            // asdf comments
+            // Inside an array, user starts typing a snippet name or presses CTRL+SPACE
             if (
                 (triggerCharacter === '{')
                 && insertionParent instanceof Json.ObjectValue
                 && parents[0] instanceof Json.ArrayValue
                 && parents[1] instanceof Json.Property
             ) {
+                // The context is the name of the property whose value is the array.  E.g.:
+                //
+                // "resources": [
+                //      <<CURSOR>>
+                //
+                //   - context is "resources" asdf
+                // ]
+                //
                 const parentPropertyName = parents[1].asPropertyValue?.nameValue.unquotedValue;
-                return <SnippetContext>parentPropertyName; //asdf
+                return parentPropertyName;
             }
 
+            // Inside an array, user types "{" to start a new objecct
             if (
                 (!triggerCharacter || triggerCharacter === '{')
                 && insertionParent instanceof Json.ArrayValue
                 && parents[0] instanceof Json.Property
             ) {
+                // The context is the name of the property whose value is the array.  E.g.:
+                //
+                // "resources": [
+                //   {<<CURSOR>>}
+                //      ^^^^^^ The cursor is inside a set of curly braces that were just added (because the user typed "{")
+                //               - context is "resources"
+                // ]
+                //
+
                 const parentPropertyName = parents[0].asPropertyValue?.nameValue.unquotedValue;
-                return <SnippetContext>parentPropertyName; //asdf
+                return parentPropertyName;
             }
         }
 

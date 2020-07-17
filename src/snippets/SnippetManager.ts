@@ -86,14 +86,17 @@ export class SnippetManager implements ISnippetManager {
                     }
 
                     items.push(new Completion.Item({
-                        label,
+                        label: `{${label}}`, //asdf
                         snippetName: name,
                         detail,
                         insertText: snippet.insertText,
                         span,
                         kind: Completion.CompletionKind.Snippet,
                         // Make sure snippets show up after normal completions
-                        priority: Completion.CompletionPriority.low
+                        priority: Completion.CompletionPriority.low,
+                        // This allows users to search for snippets by either the label (prefix) or the non-abbreviated words in the name,
+                        //  e.g. users can type "virtual" and find the "arm-vnet" snippet
+                        //asdf filterText: `${label} ${name}`
                     }));
                 }
             }
